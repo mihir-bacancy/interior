@@ -5,12 +5,14 @@ import { drizzle } from "drizzle-orm/neon-http";
 
 import * as schema from "./schema";
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not set");
-}
+/**
+ * DATABASE_URL is validated at request time, not module load, so Vercel's
+ * "Collecting page data" build step (which imports API routes without
+ * runtime env vars) doesn't crash.
+ */
+const url = process.env.DATABASE_URL || "postgresql://placeholder:placeholder@localhost:5432/placeholder";
+const sql = neon(url);
 
-const sql = neon(databaseUrl);
 export const db = drizzle({ client: sql, schema });
 
 export * from "./schema";
