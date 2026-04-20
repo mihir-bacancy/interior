@@ -4,14 +4,25 @@ import { db, accounts } from "@/lib/db";
 import { listInstagramAccounts } from "@/lib/outstand";
 import { requireAuth } from "@/lib/session";
 
-/** List Outstand IG accounts, caching them in our DB so UI is fast. */
+/** List Outstand IG accounts, caching them in our DB so UI is fast.
+ *
+ * If ALLOWED_IG_USERNAMES is set (comma-separated), only accounts whose
+ * username matches are synced — the Outstand API key has ~50 unrelated
+ * handles attached, and we only want to manage our own. */
 export async function GET() {
   try { await requireAuth(); } catch (e) { return e as Response; }
 
-  const fresh = await listInstagramAccounts();
+  const allowlist = (process.env.ALLOWED_IG_USERNAMES || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 
-  // Upsert each into our cache
-  for (const a of fresh) {
+  const fresh = await listInstagramAccounts();
+  const scoped = allowlist.length
+    ? fresh.filter((a) => allowlist.includes((a.username || "").toLowerCase()))
+    : fresh;
+
+  for (const a of scoped) {
     await db
       .insert(accounts)
       .values({
@@ -31,5 +42,5 @@ export async function GET() {
   }
 
   const cached = await db.select().from(accounts);
-  return NextResponse.json({ accounts: cached, source: "outstand" });
+  return NextResponse.json({ accounts: cached, source: "outstand", allowlist });
 }
