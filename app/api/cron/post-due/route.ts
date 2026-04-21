@@ -4,20 +4,24 @@ import { publishDuePosts } from "@/lib/publisher";
 
 /**
  * Called by cron-job.org every few minutes.
- * Auth: must send header `x-cron-secret: <CRON_SECRET>`.
  *
- * cron-job.org setup:
- *   URL:     https://<your-vercel-domain>/api/cron/post-due
- *   Method:  POST
- *   Headers: x-cron-secret: <value of CRON_SECRET env var>
- *   Schedule: every 5 minutes (or whatever granularity you want)
+ * Auth (either works):
+ *   - Header:  x-cron-secret: <CRON_SECRET>
+ *   - Query:   ?secret=<CRON_SECRET>
+ *
+ * Query-param form is for cron services that can't set custom headers.
+ * Trade-off: query strings show up in access logs / cron-job.org history,
+ * so rotate CRON_SECRET if you suspect exposure.
  */
 export async function POST(req: NextRequest) {
   const expected = (process.env.CRON_SECRET || "").trim();
   if (!expected) {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
-  const received = req.headers.get("x-cron-secret")?.trim() || "";
+  const received =
+    req.headers.get("x-cron-secret")?.trim() ||
+    new URL(req.url).searchParams.get("secret")?.trim() ||
+    "";
   if (received !== expected) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
