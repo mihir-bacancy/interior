@@ -108,10 +108,27 @@ async function main() {
     return;
   }
 
-  // Walk forward through IST calendar days, emitting slot events until we run
-  // out of videos.
+  // Start the cursor AFTER the latest already-scheduled date so re-runs
+  // tack onto the end of the queue instead of colliding with existing slots.
+  const latest = await sql`
+    SELECT MAX(scheduled_at) AS max_at FROM posts
+    WHERE status IN ('scheduled','publishing','posted')
+      AND outstand_account_id = ${accountId}
+  ` as unknown as { max_at: string | null }[];
+
   const slots: { whenUtc: Date; videoId: number; captionId: number }[] = [];
-  let cursor = tomorrowIst(); // IST midnight
+  let cursor: Date;
+  if (latest[0]?.max_at) {
+    const lastUtc = new Date(latest[0].max_at);
+    // Convert to IST date, then add 1 day to start fresh the next morning
+    const lastIst = new Date(lastUtc.getTime() + IST_OFFSET_MIN * 60 * 1000);
+    lastIst.setUTCHours(0, 0, 0, 0);
+    cursor = addDays(lastIst, 1);
+    console.log(`  resuming from ${cursor.toISOString().slice(0, 10)} (after last scheduled post)`);
+  } else {
+    cursor = tomorrowIst();
+    console.log(`  starting from tomorrow IST`);
+  }
   let queueIdx = 0;
 
   while (queueIdx < videos.length) {
