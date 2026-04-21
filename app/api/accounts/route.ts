@@ -17,7 +17,16 @@ export async function GET() {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const fresh = await listInstagramAccounts();
+  let fresh;
+  try {
+    fresh = await listInstagramAccounts();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { error: "outstand_fetch_failed", details: msg, hasKey: !!process.env.OUTSTAND_API_KEY },
+      { status: 502 }
+    );
+  }
   const scoped = allowlist.length
     ? fresh.filter((a) => allowlist.includes((a.username || "").toLowerCase()))
     : fresh;
